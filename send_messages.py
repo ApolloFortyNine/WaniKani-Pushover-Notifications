@@ -1,3 +1,6 @@
+# TODO Could check users levels for the kanji/radicals under review to see if they are
+# gurued yet
+# Should be able to make a large filter query to assignments and check there
 import asyncio
 import time
 import aiohttp
