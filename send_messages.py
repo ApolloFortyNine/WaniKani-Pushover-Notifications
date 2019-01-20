@@ -13,7 +13,7 @@ async def get_summary(session, wk_api_key):
     summary = await resp.json()
     current_review_time = summary['data_updated_at']
     current_reviews_ids = summary['data']['reviews'][0]['subject_ids']
-    return current_review_time, current_reviews_ids
+    return current_reviews_ids
 
 async def get_current_level_items(db, current_reviews_ids):
     sql_placeholder = '?'
@@ -29,7 +29,8 @@ async def get_user_level(session, wk_api_key):
     resp = await session.get('https://api.wanikani.com/v2/user', headers=auth_header)
     user = await resp.json()
     user_current_level = user['data']['level']
-    return user_current_level
+    user_last_review_time = user['data_updated_at']
+    return user_current_level, user_last_review_time
 
 async def get_unpassed_items(session, wk_api_key, current_reviews_ids, user_current_level):
     auth_header = {'Authorization': 'Bearer {0}'.format(wk_api_key)}
@@ -48,22 +49,37 @@ async def get_unpassed_items(session, wk_api_key, current_reviews_ids, user_curr
                 radical_count += 1
     return radical_count, kanji_count
 
+async def send_pushover_notification(session, db, pushover_user_key, radical_count, kanji_count):
+    total_pending = kanji_count + radical_count
+    message = "You have {0} pending priority reviews. Radicals: {1} | Kanji: {2}".format(total_pending, radical_count, kanji_count)
+    wk_review_link = 'https://www.wanikani.com/review'
+    payload = {'token': pushover_application_key, 'user': pushover_user_key, 'message': message, 'url': wk_review_link, 'url_title': 'Review Now'}
+    resp = await session.post('https://api.pushover.net/1/messages.json', json=payload)
+    if resp.status == 200:
+        return True
+
+async def set_last_alert_ts(db, user_id, user_last_review_time):
+    await db.execute("UPDATE account SET last_review_ts=? WHERE id=?", [user_last_review_time, user_id])
+    await db.commit()
 
 async def process_user(session, db, user):
-    # TODO Can check /user for last updated to see if reviews were done
     # Call get summary, if no reviews, skip
-    current_review_time, current_reviews_ids = await get_summary(session, user['wk_api_key'])
-    print(current_review_time)
+    user_current_level, user_last_review_time = await get_user_level(session, user['wk_api_key'])
+    if user_last_review_time == user['last_review_ts']:
+        return
+    current_reviews_ids = await get_summary(session, user['wk_api_key'])
     print(current_reviews_ids)
-    user_current_level = await get_user_level(session, user['wk_api_key'])
     radical_count, kanji_count = await get_unpassed_items(session, user['wk_api_key'], current_reviews_ids, user_current_level)
     print(kanji_count)
     print(radical_count)
+    if kanji_count or radical_count:
+        sent = await send_pushover_notification(session, db, user['pushover_user_key'], radical_count, kanji_count)
+        if sent:
+            await set_last_alert_ts(db, user['id'], user_last_review_time)
     # current_level_ids = await get_current_level_items(db, current_reviews_ids)
     # Call get assignments since last alert date, if none, skip
     # Check current ids from summary against DB for current level check
     # If current level, send alert
-    pass
 
 def dict_factory(cursor, row):
     d = {}
@@ -77,12 +93,11 @@ async def get_users(db):
     print(res)
     return res
 
+
 async def create_tasks():
     # Get users from db
     # loop through and use each key, also need pushover key
     # TODO Use wk_api_key and pushover from db
-    wk_api_key = my_wk_api_key
-    pushover_user_key = my_pushover_api_key
     async with aiohttp.ClientSession() as session:
         async with aiosqlite.connect('wk_push.db') as db:
             db.row_factory = dict_factory

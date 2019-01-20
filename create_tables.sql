@@ -4,6 +4,7 @@ create table account (
     pushover_user_key TEXT,
     username TEXT,
     last_alert_ts TEXT,
+    last_review_ts TEXT,
     alert_count INTEGER,
     joined_ts TEXT,
     active INTEGER,
