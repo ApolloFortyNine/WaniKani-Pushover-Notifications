@@ -24,13 +24,42 @@ async def get_current_level_items(db, current_reviews_ids):
     print(res)
     return res
 
+async def get_user_level(session, wk_api_key):
+    auth_header = {'Authorization': 'Bearer {0}'.format(wk_api_key)}
+    resp = await session.get('https://api.wanikani.com/v2/user', headers=auth_header)
+    user = await resp.json()
+    user_current_level = user['data']['level']
+    return user_current_level
+
+async def get_unpassed_items(session, wk_api_key, current_reviews_ids, user_current_level):
+    auth_header = {'Authorization': 'Bearer {0}'.format(wk_api_key)}
+    subject_ids = ','.join(str(x) for x in current_reviews_ids)
+    subject_types = 'kanji,radical'
+    params = {'subject_ids': subject_ids, 'levels': user_current_level, 'subject_types': subject_types}
+    resp = await session.get('https://api.wanikani.com/v2/assignments', headers=auth_header, params=params)
+    assignments = await resp.json()
+    kanji_count = 0
+    radical_count = 0
+    for assignment in assignments['data']:
+        if not assignment['data']['passed']:
+            if assignment['data']['subject_type'] == 'kanji':
+                kanji_count += 1
+            elif assignment['data']['subject_type'] == 'radical':
+                radical_count += 1
+    return radical_count, kanji_count
+
+
 async def process_user(session, db, user):
+    # TODO Can check /user for last updated to see if reviews were done
     # Call get summary, if no reviews, skip
     current_review_time, current_reviews_ids = await get_summary(session, user['wk_api_key'])
     print(current_review_time)
     print(current_reviews_ids)
-    # TODO Get current level from /user and pass to get_current_level_items
-    current_level_ids = await get_current_level_items(db, current_reviews_ids)
+    user_current_level = await get_user_level(session, user['wk_api_key'])
+    radical_count, kanji_count = await get_unpassed_items(session, user['wk_api_key'], current_reviews_ids, user_current_level)
+    print(kanji_count)
+    print(radical_count)
+    # current_level_ids = await get_current_level_items(db, current_reviews_ids)
     # Call get assignments since last alert date, if none, skip
     # Check current ids from summary against DB for current level check
     # If current level, send alert
