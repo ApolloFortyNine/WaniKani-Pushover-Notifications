@@ -15,14 +15,21 @@ async def get_summary(session, wk_api_key):
     current_reviews_ids = summary['data']['reviews'][0]['subject_ids']
     return current_review_time, current_reviews_ids
 
-async def get_current_level_items(current_reviews_ids):
-    pass
+async def get_current_level_items(db, current_reviews_ids):
+    sql_placeholder = '?'
+    placeholders = ', '.join(sql_placeholder for _ in current_reviews_ids)
+    query = "SELECT id FROM wk_subject WHERE id in ({0}) AND subject_level=23 AND subject_object in ('kanji', 'radical')".format(placeholders)
+    cursor = await db.execute(query, current_reviews_ids)
+    res = await cursor.fetchall()
+    print(res)
+    return res
 
 async def process_user(session, db, user):
     # Call get summary, if no reviews, skip
     current_review_time, current_reviews_ids = await get_summary(session, user['wk_api_key'])
     print(current_review_time)
     print(current_reviews_ids)
+    current_level_ids = await get_current_level_items(db, current_reviews_ids)
     # Call get assignments since last alert date, if none, skip
     # Check current ids from summary against DB for current level check
     # If current level, send alert
@@ -35,7 +42,6 @@ def dict_factory(cursor, row):
     return d
 
 async def get_users(db):
-    db.row_factory = dict_factory
     cursor = await db.execute("SELECT * from account")
     res = await cursor.fetchall()
     print(res)
@@ -49,6 +55,7 @@ async def create_tasks():
     pushover_user_key = my_pushover_api_key
     async with aiohttp.ClientSession() as session:
         async with aiosqlite.connect('wk_push.db') as db:
+            db.row_factory = dict_factory
             # create tasks
             # TODO Should return list of task objects, then we can gather them
             users = await get_users(db)
