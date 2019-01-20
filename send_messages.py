@@ -5,13 +5,12 @@ import asyncio
 import aiosqlite
 import time
 import aiohttp
-from config import *
+from config import pushover_application_key
 
 async def get_summary(session, wk_api_key):
     auth_header = {'Authorization': 'Bearer {0}'.format(wk_api_key)}
     resp = await session.get('https://api.wanikani.com/v2/summary', headers=auth_header)
     summary = await resp.json()
-    current_review_time = summary['data_updated_at']
     current_reviews_ids = summary['data']['reviews'][0]['subject_ids']
     return current_reviews_ids
 
@@ -21,7 +20,6 @@ async def get_current_level_items(db, current_reviews_ids):
     query = "SELECT id FROM wk_subject WHERE id in ({0}) AND subject_level=23 AND subject_object in ('kanji', 'radical')".format(placeholders)
     cursor = await db.execute(query, current_reviews_ids)
     res = await cursor.fetchall()
-    print(res)
     return res
 
 async def get_user_level(session, wk_api_key):
@@ -68,10 +66,7 @@ async def process_user(session, db, user):
     if user_last_review_time == user['last_review_ts']:
         return
     current_reviews_ids = await get_summary(session, user['wk_api_key'])
-    print(current_reviews_ids)
     radical_count, kanji_count = await get_unpassed_items(session, user['wk_api_key'], current_reviews_ids, user_current_level)
-    print(kanji_count)
-    print(radical_count)
     if kanji_count or radical_count:
         sent = await send_pushover_notification(session, db, user['pushover_user_key'], radical_count, kanji_count)
         if sent:
@@ -90,7 +85,6 @@ def dict_factory(cursor, row):
 async def get_users(db):
     cursor = await db.execute("SELECT * from account")
     res = await cursor.fetchall()
-    print(res)
     return res
 
 
@@ -115,7 +109,7 @@ async def create_tasks():
             # await asyncio.gather(get_summary(session, wk_api_key))
 
 # asyncio.run(get_summary())
-start = time.time()
+# start = time.time()
 asyncio.run(create_tasks())
-end = time.time()
-print(str(end - start) + " seconds")
+# end = time.time()
+# print(str(end - start) + " seconds")
