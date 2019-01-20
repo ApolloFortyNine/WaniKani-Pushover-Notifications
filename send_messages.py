@@ -29,6 +29,7 @@ async def process_user(session, db, user):
     current_review_time, current_reviews_ids = await get_summary(session, user['wk_api_key'])
     print(current_review_time)
     print(current_reviews_ids)
+    # TODO Get current level from /user and pass to get_current_level_items
     current_level_ids = await get_current_level_items(db, current_reviews_ids)
     # Call get assignments since last alert date, if none, skip
     # Check current ids from summary against DB for current level check
