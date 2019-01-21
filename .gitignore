@@ -119,3 +119,4 @@ dmypy.json
 config.py
 wk_push.db
 .vscode/
+insert_account.sql
