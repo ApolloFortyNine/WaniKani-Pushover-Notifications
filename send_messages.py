@@ -14,14 +14,6 @@ async def get_summary(session, wk_api_key):
     current_reviews_ids = summary['data']['reviews'][0]['subject_ids']
     return current_reviews_ids
 
-async def get_current_level_items(db, current_reviews_ids):
-    sql_placeholder = '?'
-    placeholders = ', '.join(sql_placeholder for _ in current_reviews_ids)
-    query = "SELECT id FROM wk_subject WHERE id in ({0}) AND subject_level=23 AND subject_object in ('kanji', 'radical')".format(placeholders)
-    cursor = await db.execute(query, current_reviews_ids)
-    res = await cursor.fetchall()
-    return res
-
 async def get_user_level(session, wk_api_key):
     auth_header = {'Authorization': 'Bearer {0}'.format(wk_api_key)}
     resp = await session.get('https://api.wanikani.com/v2/user', headers=auth_header)
@@ -71,7 +63,6 @@ async def process_user(session, db, user):
         sent = await send_pushover_notification(session, db, user['pushover_user_key'], radical_count, kanji_count)
         if sent:
             await set_last_alert_ts(db, user['id'], user_last_review_time)
-    # current_level_ids = await get_current_level_items(db, current_reviews_ids)
     # Call get assignments since last alert date, if none, skip
     # Check current ids from summary against DB for current level check
     # If current level, send alert
